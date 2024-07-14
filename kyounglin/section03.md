@@ -48,7 +48,7 @@
 @ContextConfiguration(classes = TestObjectFactory.class)
 @Autowired
 PaymentService paymentService;
-
+```
 ## 학습 테스트
 
 - 직접 만들지 않은 코드, 라이브러리, 레거시 시스템에 대한 테스트
