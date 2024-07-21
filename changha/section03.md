@@ -40,3 +40,5 @@
 - 위와 같은 식으로 형변환을 해야 함 
 - setExRate는 ExRateProviderStub에만 있는 메소드이기 때문에
 - @ExRateProviderStub 타입으로 한다면 형변환을 하지 않아도 됨
+
+-----------------
