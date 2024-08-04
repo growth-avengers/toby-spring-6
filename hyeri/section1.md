@@ -1,58 +1,93 @@
-# 01 스프링 개발 시작하기
+# 01 오브젝트와 의존관계
 ***
+## 1. 오브젝트와 의존관계
+### 오브젝트
+- 클래스를 기반으로 생성된 실제 인스턴스
+- 실제로 우리가 프로그램을 실행하면 그때 만들어져서 동작하는 무엇인가
 
+### 클래스
+- 객체를 생성하기 위한 설계도
+- 객체가 가지는 속성과 행동을 정의
 
-## PaymentService 개발하기
-- 해외직구를 위한 원화 결제 준비 기능 개발
-- 주문번호, 외국 통화 종류, 외국 통화 기준 결제 금액을 전달 받아서 다음의 정보를 더해 Payment를 생성한다.
-    - 적용 환율
-    - 원화 환산 금액
-    - 원화 환산 금액 유효시간
+### 의존관계
+- 한 클래스나 모듈이 다른 클래스나 모듈을 필요로 하는 관계
+- 클래스 A가 클래스 B의 인스턴스를 생성하거나 사용하는 경우, 클래스 A는 클래스 B에 의존
+- 클래스 B가 변경되면 클래스 A는 이에 영향을 받음
+- 클래스 레벨의 의존관계와 런타임 레벨의 의존관계가 다름
 
-- PaymentService.prepare() 메소드로 개발
-    - Payment 오브젝트 리턴.
+## 2. 관심사의 분리
+```java
+    public Payment prepare(Long orderId, String currency, BigDecimal foreignCurrencyamount) throws IOException {
+        // 환율 가져오기
+        URL url = new URL("https://open.er-api.com/v6/latest/" + currency);
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+        String response = br.lines().collect(Collectors.joining());
+        br.close();
 
+        ObjectMapper mapper = new ObjectMapper();
+        ExRateData data = mapper.readValue(response, ExRateData.class);
+        BigDecimal exRate = data.rates().get("KRW");
+        System.out.println(exRate);
 
-### 01. build.gradle
-- Gradle 빌드 시스템에서 사용되는 설정 파일
-- build.gradle 파일을 통해 프로젝트의 종속성, 플러그인, 빌드 스크립트 등을 정의
-- Gradle은 자동화된 빌드 도구로, 프로젝트의 빌드, 테스트, 배포 등을 관리하는 데 사용
+        // 금액 계산
+        BigDecimal convertedAmount = foreignCurrencyamount.multiply(exRate);
 
+        // 유효 시간 계산
+        LocalDateTime validUntil = LocalDateTime.now().plusMinutes(30);
 
-### 02. https://open.er-api.com/v6/latest/USD
-<img src="https://i.ibb.co/M54r3X2/2024-07-07-8-01-45.png" style="zoom:50%;" />
-- 미국 달러(USD)의 최신 환율 정보를 제공하는 API
-- 이 URL을 통해 다양한 통화에 대한 실시간 환율 데이터를 받을 수 있다.
-- API는 마지막 업데이트 시간과 다음 업데이트 예정 시간 등을 포함하며, ExchangeRate-API에서 제공하는 서비스이다.
-```cmd
-:: 지정된 URL에 GET 요청을 보내고 요청 및 응답의 모든 세부 정보를 터미널에 출력
-http -v https://open.er-api.com/v6/latest/USD
+        return new Payment(orderId, currency, foreignCurrencyamount, exRate, convertedAmount, validUntil);
+    }
+```
+
+- 각 부분이 독립적으로 변경될 수 있도록 코드도 명확히 분리
+- 변경이 되는 시점과 이유가 다른 두 가지가 함께 들어 있는 경우, 유지보수성과 확장성이 떨어짐
+1. 환율 정보 가져오기: 웹 API를 호출하여 환율 데이터를 가져오고, 이를 파싱하여 환율 값을 추출
+2. 결제 정보 처리: 환율을 사용하여 외화 금액을 원화로 변환하고, 결제 정보를 생성
+
+## 3. 상속을 통한 확장
+하지만 여전히 클래스 레벨에서 보면 두 개의 관심사를 가지고 있다. Payment라는 오브젝트를 생성하는 코드를 잘 만들어놨어도 환율을 가져오는 방식이나 여러 매커니즘이 변경되면 전체를 계속 수정해야하기때문에 재사용 관점에서 좋지않다.
+- 클래스 분리하고 상속을 통해 확장해줌
+```java
+public class WebApiExRatePaymentService extends PaymentService {}
 ```
 
 
+## 4. 클래스의 분리
+상속을 통한 확장은 오히려 코드의 복잡성을 증가시킬 수 있으며, 이로 인해 코드의 재사용성이 떨어질 수 있다.
+- 상속을 통한 확장보다는 명확한 클래스 분리를 통해 각 클래스의 역할을 분명히 하는 것이 바람직함
+- 클래스의 분리를 통해 각 클래스가 하나의 책임만 가지도록 설계
 
-### 03. BigDecimal 클래스
-
-> Java의 기본 자료형인 float과 double은 유한한 비트로 무한 소수 또는 매우 작은 소수점을 표현하기 때문에 정밀도의 한계가 있으며, 반복되거나 복잡한 계산에서 오차가 커질 수 있다.
-
-- Java에서 임의 정밀도의 부동 소수점 수를 표현하기 위해 사용
-- BigDecimal 객체는 불변(immutable)으로, 한 번 생성된 객체는 수정할 수 없어 새로운 값은 항상 새로운 객체로 반환
-- add, subtract, multiply, divide와 같은 다양한 산술 연산 메소드를 제공
+<img src="https://i.ibb.co/LzntTsv/2024-07-07-10-42-50.png"  />
 
 
+## 5. 인터페이스 도입
+getWebExRate()와 getExRate() 메소드 이름을 통일해준다.
 
-### 04. Record 클래스
-- 간결하고 불변하는 데이터 클래스를 작성하기 위해 도입된 새로운 클래스 타입
-- 주로 데이터 전달 객체(DTO)를 만들 때 사용되며, 자동으로 생성자, 접근자 메서드(getter), equals(), hashCode(), toString() 메서드를 생성
+<img src="https://i.ibb.co/q5jsZmq/2024-07-07-10-44-04.png"  />
 
 
+## 6. 관계설정 책임의 분리
+런타임에 의존해서 사용해야 할 클래스에 오브젝트를 의존하는 거지만 그거를 설정하는 책임이 어디에 있는가 그거에 따라서 코드 레벨의 의존 관계도 달라진다. 따라서 의존관계를 설정하는 그 코드를 다른 곳을 분리한다.
 
-### 기타 꿀팁
+## 7. 오브젝트 팩토리
+그 안에 또 PaymentService가 다른 클래스 오브젝트와 어떻게 관계를 맺어야 될지에 대한 책임을 분리해준다.
+
+```java
+public class ObjectFactory {}
 ```
-프로젝트 목록으로 이동
-command(⌘) + 1
-```
-```
-디렉토리, 패키지, 클래스 등 생성 목록 보기
-command(⌘) + N
-```
+
+## 8. 원칙과 패턴
+**개방 폐쇄 원칙(OCP)**
+- 클래스나 모듈은 확장에는 열려 있어야 하고 변경에는 닫혀 있어야 한다.
+- 어떤 클래스는 이 클래스의 기능을 확장할 때 그 클래스의 코드는 변경되면 안 된다.
+
+**높은 응집도와 낮은 결합도**
+- 응집도가 높다는 것은 하나의 모듈이 하나의 책임 또는 관심사에 집중되어있다는 뜻으로 변화가 일어날 때 해당 모듈에서 변하는 부분이 크다.
+- 책임과 관심사가 다른 모듈과는 낮은 결합도, 즉 느슨하게 연결된 형태를 유지하는 것이 바람직하다.
+
+**전략패턴**
+- 자신의 기능 맥락에서 필요에 따라서 변경이 필요한 알고리즘을 인터페이스를 통해 통째로 외부로 분리시키고 이를 구현한 구체적인 알고리즘 클래스를 필요에 따라 바꿔서 사용할 수 있게 하는 디자인 패턴
+
+**제어의 역전**
+- 제어권 이전을 통한 제어관계 역전 - 프레임워크의 기본 동작 원리
